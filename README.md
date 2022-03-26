@@ -1,12 +1,12 @@
 # wsbkp
 
-<u>W</u>ake/<u>S</u>leep <u>B</u>ac<u>k</u>u<u>p</u> -- 'wakes up' usb drive, rsyncs and powers off
+***W***ake/***S***leep ***B***ac***k***u***p*** -- 'wakes up' usb drive, rsyncs and powers off
 
-A wrapper script to create cheap and easy (partially) 'offline' backups, at file level. Having the disk online only while backing up could offer benefits like data isolation and (some) protection against crypto lockers. The script is meant to run on Linux and uses rsync, hdparm and udisksctl.
+A wrapper script to create cheap and easy (partially) 'offline' backups, at file level. Having the disk online only while backing up could offer benefits like data isolation and (some) protection against crypto lockers. This shell script is meant to run on Linux and uses rsync, hdparm and udisksctl.
 
-This is what the output looks like after starting:
+Output looks like this:
 
-```
+``` shell
 
 root@host:~# wsbkp.sh
 
@@ -23,7 +23,7 @@ root@host:~# wsbkp.sh
   /run/
   /tmp/
 
-[2022-03-26 17:58:28] SOURCE DIR: "/" DESTINATION: "/mnt/bkp/"
+[2022-03-26 17:58:28] Backup -- SOURCE DIR: "/" DESTINATION: "/mnt/bkp/"
 
 * Listing "/mnt/bkp" after sync...
 total 100
@@ -94,7 +94,7 @@ Now running `wsbkp.sh -l` should display drive details.
 
 2\) Change settings inside script:
 
-```
+``` shell
 DST_UUID="abc12345-1234-1234-1234-aaaabbbbcccc" # uuid of backup device
 DST_MNT="/mnt/bkp"                              # dst/target path
 BKP_DIRS="/"                                    # dirs to backup
