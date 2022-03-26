@@ -8,7 +8,7 @@
 #   DST_UUID="abc12345-1234-1234-1234-aaaabbbbcccc" (see 'blkid' command)
 #   BKP_DIRS="/etc/ /root/ /home/ /opt/ /usr/local/bin/"
 
-DST_UUID="68bbc7e0-437a-4893-8e62-6b02ef17a857" # uuid of backup device
+DST_UUID="d99a6fe1-3216-4b01-adba-a44fa360b50b" # uuid of backup device
 DST_MNT="/mnt/bkp"                              # dst/target path
 BKP_DIRS="/"                                    # dirs to backup
 EXCL_DIRS="
@@ -199,10 +199,11 @@ func_mnt || { \
 echo
 if [ -d "$DST_MNT" ]; then
   if findmnt -n "$DST_MNT" | grep -q " $DST_DEV"; then
+    status=-1
     printf "* Backing up using \"%s\"...\n" "$RSYNC"
     printf "* Dir(s): \"%s\"\n" "$BKP_DIRS"
     printf "* Target drive: \"%s\" mounted on \"%s\" (UUID=%s)\n" "$DST_DEV" "$DST_MNT" "$DST_UUID"
-    printf "* Exclude: %s\n\n" "$( echo "$EXCL_DIRS" | sed 's/--exclude=//g' )"
+    printf "* Exclude dir(s): %s\n\n" "$( echo "$EXCL_DIRS" | sed -- 's/--exclude=//g' )"
     # rsync dirs and poweroff if loop returns 0 (warn if it fails)
     ( 
       for i in $BKP_DIRS; do
@@ -216,7 +217,7 @@ if [ -d "$DST_MNT" ]; then
             printf "> WARNING: \"$i\" has no trailing slash, %s\n\n" "$MSG"
             sleep 10
           fi
-          printf "* [%s] SOURCE DIR: \"%s\" DESTINATION: \"%s\"\n" "$(date +%F\ %T )" "$i" "${DST_MNT}${i}" | \
+          printf "* [%s] Backup -- SOURCE DIR: \"%s\" DESTINATION: \"%s\"\n" "$(date +%F\ %T )" "$i" "${DST_MNT}${i}" | \
             tee -a "$LOG"
           if [ ! -d "${DST_MNT}${i}" ]; then
             printf "+ Creating %s\n" "${DST_MNT}${i}"
@@ -228,14 +229,15 @@ if [ -d "$DST_MNT" ]; then
         fi
         echo
       done
-    ) && { \
-      printf "* Listing \"%s\" after sync\n%s\n\n" "$DST_MNT" "$(ls -la "$DST_MNT")"
+    ) && status=0 || status=1
+    if [ "$status" -eq 0 ]; then
+      printf "* Syncing complete, listing \"%s\"\n%s\n\n" "$DST_MNT" "$(ls -la "$DST_MNT")"
       printf "* [%s] Done. Powering off\n" "$(date +%F\ %T )" | tee -a "$LOG"
-      sleep 30 && func_umnt && func_power_off;
-    } || { \
+      sleep 30 && func_umnt && func_power_off
+    else
       printf"> [%s] WARNING: Check if drive is unmounted and powered down\n" "$(date +%F\ %T )" | \
         tee -a "$LOG"
-    }
+    fi
   else
     printf "ERROR: mount \"%s\" not found, exiting\n" "$DST_MNT"
     exit 1
