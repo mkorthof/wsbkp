@@ -80,11 +80,11 @@ The target backup device should be available with a uuid, writable filesystem an
 
 Run as root. No command line arguments should be needed, all options are set inside script. A log file will be created here: '/var/log/wsbkp.log'.
 
-The options listed under 'Usage' are meant in case if e.g. the drive fails to power off automatically after the backup is finished. If that happens, retry manually with `wsbpk -o`.
+The options listed under 'Usage' are meant in case if e.g. the drive fails to power off automatically after the backup is finished. If that happens, retry manually with `wsbkp.sh -o`.
 
 Another option is to do a one time backup of a different source directory than configured:
 
-`wsbkp /home/user/important /root/more_stuff`
+`wsbkp.sh /home/user/important /root/more_stuff`
 
 ### Restore
 
