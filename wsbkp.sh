@@ -8,20 +8,22 @@
 #   DST_UUID="abc12345-1234-1234-1234-aaaabbbbcccc" (see 'blkid' command)
 #   BKP_DIRS="/etc/ /root/ /home/ /opt/ /usr/local/bin/"
 
-DST_UUID="8265ade0-abb1-46ff-8600-a90d09079c3d" # uuid of backup device
+DST_UUID="" # uuid of backup device
 DST_MNT="/mnt/bkp"                              # dst/target path
 BKP_DIRS="/"                                    # dirs to backup
 EXCL_DIRS="
+  --exclude=${DST_MNT}/
   --exclude=/proc/
   --exclude=/sys/
   --exclude=/lost+found/
   --exclude=/mnt/
   --exclude=/run/
   --exclude=/tmp/
+  --exclude=/var/lib/docker/
 "
 RSYNC="rsync -aA --info=flist0,name0,progress2,stats2 --progress --stats"
 LOG="/var/log/wsbkp.log"
-OUT="/dev/null" # stdout
+OUT="/dev/null" # /dev/null or /dev/stdout (show rsync output)
 FORCE=0         # force even if dev not found
 
 # END OF CONFIG ################################################################
@@ -33,7 +35,7 @@ func_dev() {
   #    echo "! ERROR: Device \"$DST_UUID\" not found, exiting..."
   #    exit 1
   #  fi
-  DST_DEV="$( blkid -U "$DST_UUID" )" || { \
+  DST_DEV="$(blkid -U "$DST_UUID")" || {
     if [ "$FORCE" -eq 0 ]; then
       printf "! ERROR: Device \"%s\" not found, exiting...\n" "$DST_UUID"
       exit 1
@@ -42,7 +44,7 @@ func_dev() {
 }
 
 func_wake() {
-  hdparm -C "/dev/disk/by-uuid/$DST_UUID" || { \
+  hdparm -C "/dev/disk/by-uuid/$DST_UUID" || {
     printf "! ERROR: Drive with UUID %s did not wake up, exiting...\n" "$DST_UUID"
     exit 1
   }
@@ -60,8 +62,8 @@ func_sleep() {
 func_mnt() {
   # in case var DST_MNT is empty generate it using device name (/mnt/sdx)
   if [ -z "$DST_MNT" ]; then
-    func_dev && { \
-      TMP="$( basename "$DST_DEV" )"
+    func_dev && {
+      TMP="$(basename "$DST_DEV")"
       if echo "$TMP" | grep -q "^sd[a-z]"; then
         DST_MNT="/mnt/${TMP}"
       fi
@@ -70,63 +72,78 @@ func_mnt() {
   if [ ! -d "$DST_MNT" ]; then
     mkdir "$DST_MNT"
   fi
-  func_dev && \
-  mount "$DST_DEV" "$DST_MNT" && \
-  printf -- "- INFO: Mounted \"%s\" \"%s\"\n" "$DST_DEV" "$DST_MNT"
+  func_dev &&
+    mount "$DST_DEV" "$DST_MNT" &&
+    printf -- "- INFO: Mounted \"%s\" \"%s\"\n" "$DST_DEV" "$DST_MNT"
 }
 
-func_umnt() { umount "$DST_MNT"; }
+func_umnt() {
+  umount "$DST_MNT" ||
+    {
+      printf "! ERROR: Could not umount \"%s\", exiting...\n" "$DST_MNT"
+      exit 1
+    }
+}
 
-
-# Power on using usb host controller interface (xchi, ehci, ohci)
+# Power on using usb host controller interface
+#   ohci-pci: usb 1.1 (uhci)
+#   ehci-pci: usb 1.1 2.0
+#   xhci_hcd: usb 1.0 2.0 3.0
 func_power_on() {
   #shopt -s nullglob
-  for i in /sys/bus/pci/drivers/?hci-pci ; do
-    cd "$i" || { \
-      printf "! ERROR: Failed to change directory to %s\n" "$i"
+  for i in /sys/bus/pci/drivers/?hci[_-][hp]c[di]; do
+    cd "$i" || {
+      printf "! ERROR: Failed to change host controller directory to %s\n" "$i"
       exit 1
     }
     printf -- "- INFO: Resetting devices from %s...\n" "$i"
-    for j in ????:??:??.? ; do
-      printf "%s" "$j" > unbind; printf "%s" "$j" > bind
+    for j in ????:??:??.?; do
+      printf "%s" "$j" >unbind
+      printf "%s" "$j" >bind
       sleep 1
     done
+    if echo "$i" | grep -q "xhci_hcd"; then
+      sleep 20
+    fi
   done
 }
 
 func_power_off() {
   func_dev && {
-    command -v udisksctl >/dev/null 2>&1 && { \
-      udisksctl power-off --no-user-interaction -b "$DST_DEV" || { \
+    command -v udisksctl >/dev/null 2>&1 && {
+      udisksctl power-off --no-user-interaction -b "$DST_DEV" || {
         echo "> WARNING: udiskctl did not run successfully"
         exit 1
       }
+    } || {
+      echo "! ERROR: udisksctl not found"
+      exit 1
     }
   }
 }
 
 # Function to list devices using multiple methods, shows state of backup drive if it exists
-func_list () {
+func_list() {
   FORCE=1
   func_dev
   printf "\nDST_UUID=\"%s\" DST_DEV=\"%s\"\n\n" "$DST_UUID" "$DST_DEV"
   echo "fdisk :"
-  fdisk -l 2>/dev/null|grep "Disk /dev/sd[b-z]"
+  fdisk -l 2>/dev/null | grep "Disk /dev/sd[b-z]"
   echo
   echo "blkid :"
   blkid | grep -Ev "/dev/(sda[0-9]|loop|mapper)|swap|LUKS"
   echo
   echo "findmnt :"
-  findmnt -nr | \
-    grep -Ev '/(sda|pts)|^/(proc|run|sys|boot|jail)|tmpfs|overlay|fuseblk|mqueue|hugepages' | \
+  findmnt -nr |
+    grep -Ev '/(sda|pts)|^/(proc|run|sys|boot|jail)|tmpfs|overlay|fuseblk|mqueue|hugepages' |
     grep -E "$DST_DEV|$DST_MNT"
   echo
   echo "/sys/devices :"
   find /sys/devices -name block -regex '.*usb.*' -exec sh -c '
     printf "%s: %s\n" "$1" "$(ls "$1")"
-    printf "%s: %s\n" "$(echo "$1"/../model|sed s@"$1"/../@\ @)" "$(cat "$1"/../model 2>/dev/null )"' sh "{}" \; | \
-      sed -e 's|/sys/devices/pci|/pci|g' -e 's/0000:00[/:]\?//g'
-    echo
+    printf "%s: %s\n" "$(echo "$1"/../model|sed s@"$1"/../@\ @)" "$(cat "$1"/../model 2>/dev/null )"' sh "{}" \; |
+    sed -e 's|/sys/devices/pci|/pci|g' -e 's/0000:00[/:]\?//g'
+  echo
   echo "/sys/block :"
   for i in /sys/block/sd[b-z]; do
     printf "%s device/state: %s power/control: %s\n" \
@@ -134,15 +151,15 @@ func_list () {
   done
   echo
   echo "/sys/bus/pci/drivers :"
-  find /sys/bus/pci/drivers/?hci-pci/????:??:??.? -printf "%f\n" | sed -e 's|0000:00:|  |g'
+  find /sys/bus/pci/drivers/?hci[_-][hp]c[di]/????:??:??.? -printf "%f\n" | sed -e 's|0000:00:|  |g'
   echo
 }
 
-func_help ()  {
+func_help() {
   printf "\nWake/Sleep Backup\n"
   printf -- "-----------------\n\n"
   printf "SYNOPSIS: wake up usb drive, rsync, power off\n\n"
-  printf "USAGE: %s -[o|p][w|s][m|u][l][f] [dirs to backup]\n\n" "$( basename "$0" )"
+  printf "USAGE: %s -[o|p][w|s][m|u][l][f] [dirs to backup]\n\n" "$(basename "$0")"
   printf "OPTIONS: [-p]|[-o] power on | power off\n"
   printf "\t [-w]|[-s] wakeup | sleep\n"
   printf "\t [-m]|[-u] mount | umount\n"
@@ -151,18 +168,56 @@ func_help ()  {
   printf "\t [dirs to backup] overwrites setting in script\n\n"
 }
 
+# 'Shift' arg
+func_args() {
+  ARGS="$(echo "$ARGS" | sed -r -- "s/ ?-${1} ?//g")"
+}
+
 # handle arguments
-if printf -- "%s" "$*" | grep -q -- '\-h'; then func_help; exit
-  elif printf -- "%s" "$*" | grep -q -- '\-f'; then FORCE=1; shift
-  elif printf -- "%s" "$*" | grep -q -- '\-s'; then func_sleep; exit
-  elif printf -- "%s" "$*" | grep -q -- '\-w'; then func_wake; exit
-  elif printf -- "%s" "$*" | grep -q -- '\-m'; then func_mnt; exit
-  elif printf -- "%s" "$*" | grep -q -- '\-u'; then func_umnt; exit
-  elif printf -- "%s" "$*" | grep -q -- '\-o'; then func_power_off; exit
-  elif printf -- "%s" "$*" | grep -q -- '\-p'; then func_power_on; exit
-  elif printf -- "%s" "$*" | grep -q -- '\-l'; then func_list; exit
-  elif printf -- "%s" "$*" | grep -q -- '\-'; then func_help; exit
-  elif [ "$*" != "" ]; then BKP_DIRS="$*"
+ARGS="$*"
+if printf -- "%s" "$ARGS" | grep -q -- '\-f'; then
+  func_args "f"
+  FORCE=1
+fi
+if printf -- "%s" "$ARGS" | grep -q -- '\-n'; then
+  func_args "n"
+  RS_ARGS="$RS_ARGS -n"
+fi
+if printf -- "%s" "$ARGS" | grep -q -- '\-v'; then
+  func_args "v"
+  RS_ARGS="$RS_ARGS -v"
+fi
+#echo "DEBUG: ARGS=$ARGS"
+#exit
+if printf -- "%s" "$ARGS" | grep -q -- '\-h'; then
+  func_help
+  exit
+elif printf -- "%s" "$ARGS" | grep -q -- '\-s'; then
+  func_sleep
+  exit
+elif printf -- "%s" "$ARGS" | grep -q -- '\-w'; then
+  func_wake
+  exit
+elif printf -- "%s" "$ARGS" | grep -q -- '\-m'; then
+  func_mnt
+  exit
+elif printf -- "%s" "$ARGS" | grep -q -- '\-u'; then
+  func_umnt
+  exit
+elif printf -- "%s" "$ARGS" | grep -q -- '\-o'; then
+  func_power_off
+  exit
+elif printf -- "%s" "$ARGS" | grep -q -- '\-p'; then
+  func_power_on
+  exit
+elif printf -- "%s" "$ARGS" | grep -q -- '\-l'; then
+  func_list
+  exit
+elif printf -- "%s" "$ARGS" | grep -q -- '\-[^fnv]'; then
+  func_help
+  exit
+elif [ "$ARGS" != "" ]; then
+  BKP_DIRS="$*"
 fi
 
 #
@@ -181,18 +236,18 @@ fi
 
 # Main
 echo
-blkid -U "$DST_UUID" >/dev/null || { \
-  printf "[%s] Powering on drive (UUID=%s)...\n" "$(date +%F\ %T )" "$DST_UUID"
+blkid -U "$DST_UUID" >/dev/null || {
+  printf "[%s] Powering on drive (UUID=%s)...\n" "$(date +%F\ %T)" "$DST_UUID"
   func_power_on
 }
-func_dev && { printf "[%s] Using backup device \"%s\" (UUID=%s)\n" "$(date +%F\ %T )" "$DST_DEV" "$DST_UUID"; }
+func_dev && { printf "[%s] Using backup device \"%s\" (UUID=%s)\n" "$(date +%F\ %T)" "$DST_DEV" "$DST_UUID"; }
 if [ ! -d "$DST_MNT" ]; then
-  mkdir "$DST_MNT" || { \
+  mkdir "$DST_MNT" || {
     printf "! ERROR: Could not create %s\n" "$DST_MNT"
     exit 1
   }
 fi
-func_mnt || { \
+func_mnt || {
   printf "\n! ERROR: Could not mount \"%s\" on \"%s\", exiting...\n" "$DST_DEV" "$DST_MNT"
   exit 1
 }
@@ -200,12 +255,12 @@ echo
 if [ -d "$DST_MNT" ]; then
   if findmnt -n "$DST_MNT" | grep -q " $DST_DEV"; then
     status=-1
-    printf "* Command: \"%s\"\n" "$RSYNC"
+    printf "* Command: \"%s\"\n" "$RSYNC $RS_ARGS"
     printf "* Dir(s): \"%s\"\n" "$BKP_DIRS"
     printf "* Target drive: \"%s\" mounted on \"%s\" (UUID=%s)\n" "$DST_DEV" "$DST_MNT" "$DST_UUID"
-    printf "* Exclude dir(s): %s\n\n" "$( echo "$EXCL_DIRS" | sed -- 's/--exclude=//g' )"
+    printf "* Exclude dir(s): %s\n\n" "$(echo "$EXCL_DIRS" | sed -- 's/--exclude=//g')"
     # rsync dirs and poweroff if loop returns 0 (warn if it fails)
-    ( 
+    (
       for i in $BKP_DIRS; do
         if [ -d "$i" ]; then
           MSG="sleeping 10s... CTRL-C TO ABORT"
@@ -217,13 +272,13 @@ if [ -d "$DST_MNT" ]; then
             printf "> WARNING: \"$i\" has no trailing slash, %s\n\n" "$MSG"
             sleep 10
           fi
-          printf "[%s] Backup SOURCE DIR: \"%s\" to DESTINATION: \"%s\"\n" "$(date +%F\ %T )" "$i" "${DST_MNT}${i}" | \
+          printf "[%s] Backup SOURCE DIR: \"%s\" to DESTINATION: \"%s\"\n" "$(date +%F\ %T)" "$i" "${DST_MNT}${i}" |
             tee -a "$LOG"
           if [ ! -d "${DST_MNT}${i}" ]; then
             printf "+ Creating %s\n" "${DST_MNT}${i}"
             mkdir -p "${DST_MNT}${i}" || printf "! ERROR: Could not create %s\n" "${DST_MNT}${i}"
           fi
-          $RSYNC "$EXCL_DIRS" "$i" "${DST_MNT}${i}" >"$OUT" 2>&1
+          $RSYNC $RS_ARGS $EXCL_DIRS "$i" "${DST_MNT}${i}" >"$OUT" 2>&1
         else
           printf "! ERROR: \"%s\" does not exist\n" "$i"
         fi
@@ -231,11 +286,11 @@ if [ -d "$DST_MNT" ]; then
       done
     ) && status=0 || status=1
     if [ "$status" -eq 0 ]; then
-      printf "* Syncing complete, listing \"%s\"...\n%s\n\n" "$DST_MNT" "$(ls -la "$DST_MNT")"
-      printf "[%s] Done. Powering off\n" "$(date +%F\ %T )" | tee -a "$LOG"
+      printf "* Syncing complete, listing \"%s\"\n%s\n\n" "$DST_MNT" "$(ls -la "$DST_MNT")"
+      printf "[%s] Done. Powering off...\n" "$(date +%F\ %T)" | tee -a "$LOG"
       sleep 30 && func_umnt && func_power_off
     else
-      printf"[%s] > WARNING: Check if drive is unmounted and powered down\n" "$(date +%F\ %T )" | \
+      printf"[%s] > WARNING: Check if drive is unmounted and powered down\n" "$(date +%F\ %T)" |
         tee -a "$LOG"
     fi
   else

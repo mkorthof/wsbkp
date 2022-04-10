@@ -4,7 +4,7 @@
 
 Wsbkp is a wrapper shell script to create cheap and easy (partially) 'offline' backups. File level backups are created by coping data to an external (usb) disk using [rsync](https://rsync.samba.org). Having the disk online only while backing up could offer benefits like data isolation and (some) protection against crypto lockers.
 
-It's is meant to run on Linux and besides rsync uses [hdparm](https://sourceforge.net/projects/hdparm) and [udisksctl](http://storaged.org/doc/udisks2-api/latest/udisksctl.1.html).
+It's is meant to run on Linux and besides rsync uses [hdparm](https://sourceforge.net/projects/hdparm) and [udisksctl](http://storaged.org/doc/udisks2-api/latest/udisksctl.1.html). Note that not all usb controllers and drives are guaranteed to work.
 
 When executed, output looks like this:
 
@@ -90,6 +90,8 @@ Another option is to do a one time backup of a different source directory than c
 
 To restore one of more files first run `wsbkp.sh -p` to power on the drive and `wsbkp.sh -m` to mount it.
 
+When done, "disconnect" the drive with `wsbkp.sh -u` to umount then `wsbkp.sh -o` to power it off.
+
 ## Configuration
 
 **1)** Get UUID of backup drive:
@@ -123,9 +125,51 @@ The default is to backup the whole fileystem ('/') and exclude some dirs. It's a
 
 **3)** Test and schedule:
 
-Run the script manually to verify correct settings. In case of issues set `OUT=/dev/stdout` for more verbose output from rsync.
+Run the script manually to verify correct settings. In case of issues set `OUT=/dev/stdout` to show output from rsync (progress/speed etc).
 
-If all is well, schedule the script to run for example every night at 3 o'clock.
+Supported rsync options: `wsbkp.sh -n` for dry-run and/or `-v` for increased verbosity.
 
-- Cron example: `0 3 * * 0 /usr/local/sbin/wsbkp.sh >/dev/null 2>&1`
-- Systemd: see https://www.freedesktop.org/software/systemd/man/systemd.timer.html
+## Scheduling
+
+If all is well, schedule the script to run every week for example. See cron and systemd configs below (copy/paste to shell).
+
+### Cron
+
+Run script as root:
+
+``` shell
+echo '0 3 * * 1 root /usr/local/sbin/wsbkp.sh >/dev/null 2>&1' >/etc/cron.d/wsbkp`
+```
+
+### Systemd
+
+To run as systemd timer, first create unit files:
+
+``` shell
+cat <<EOF >/lib/systemd/system/wsbkp.service
+[Unit]
+Description=WakeSleep backup
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/wsbkp.sh
+EOF
+
+
+cat <<EOF >/lib/systemd/system/wsbkp.timer
+[Unit]
+Description=WakeSleep backup scheduled to run every week
+
+[Timer]
+OnCalendar=weekly
+
+[Install]
+WantedBy=timers.target
+EOF
+```
+
+Then enable timer: `systemctl enable --now wsbkp.timer`
+
+And finally reload systemd: `systemctl daemon-reload`
+
+For details see https://www.freedesktop.org/software/systemd/man/systemd.timer.html
