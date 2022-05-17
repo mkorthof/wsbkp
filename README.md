@@ -88,7 +88,7 @@ Another option is to do a one time backup of a different source directory than c
 
 ### Restore
 
-To restore one of more files first run `wsbkp.sh -p` to power on the drive and `wsbkp.sh -m` to mount it.
+To restore one or more files first run `wsbkp.sh -p` to power on the drive and `wsbkp.sh -m` to mount it.
 
 When done, "disconnect" the drive with `wsbkp.sh -u` to umount then `wsbkp.sh -o` to power it off.
 
