@@ -138,7 +138,7 @@ If all is well, schedule the script to run every week for example. See cron and 
 Run script as root:
 
 ``` shell
-echo '0 3 * * 1 root /usr/local/sbin/wsbkp.sh >/dev/null 2>&1' >/etc/cron.d/wsbkp`
+echo '0 3 * * 1 root /usr/local/sbin/wsbkp.sh >/dev/null 2>&1' >/etc/cron.d/wsbkp
 ```
 
 ### Systemd
