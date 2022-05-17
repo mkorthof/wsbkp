@@ -96,12 +96,12 @@ When done, "disconnect" the drive with `wsbkp.sh -u` to umount then `wsbkp.sh -o
 
 **1)** Get UUID of backup drive:
 
+Running `wsbkp.sh -l` should display drive details, or just run blkid
+
 ```
 root@host:~# blkid
 /dev/sdb1: UUID="bc12345-1234-1234-1234-aaaabbbbcccc" BLOCK_SIZE="1024" TYPE="ext4" PARTUUID="ab1c2345-01"
 ```
-
-Now running `wsbkp.sh -l` should display drive details.
 
 **2)** Change settings inside script:
 
