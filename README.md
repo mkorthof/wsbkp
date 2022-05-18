@@ -4,7 +4,7 @@
 
 Wsbkp is a wrapper shell script to create cheap and easy (partially) 'offline' backups. File level backups are created by coping data to an external (usb) disk using [rsync](https://rsync.samba.org). Having the disk online only while backing up could offer benefits like data isolation and (some) protection against crypto lockers.
 
-It's is meant to run on Linux and besides rsync uses [hdparm](https://sourceforge.net/projects/hdparm) and [udisksctl](http://storaged.org/doc/udisks2-api/latest/udisksctl.1.html). Note that not all usb controllers and drives are guaranteed to work.
+It is meant to run on Linux and besides rsync uses [hdparm](https://sourceforge.net/projects/hdparm) and [udisksctl](http://storaged.org/doc/udisks2-api/latest/udisksctl.1.html). Note that not all usb controllers and drives are guaranteed to work.
 
 When executed, output looks like this:
 
@@ -92,7 +92,7 @@ Another option is to do a one time backup of a different source directory than c
 
 ### Restore
 
-To restore one of more files first run `wsbkp.sh -p` to power on the drive and `wsbkp.sh -m` to mount it.
+To restore one or more files, first run `wsbkp.sh -p` to power on the drive and `wsbkp.sh -m` to mount it.
 
 When done, "disconnect" the drive with `wsbkp.sh -u` to umount then `wsbkp.sh -o` to power it off.
 
@@ -100,12 +100,12 @@ When done, "disconnect" the drive with `wsbkp.sh -u` to umount then `wsbkp.sh -o
 
 **1)** Get UUID of backup drive:
 
+Running `wsbkp.sh -l` should display drive details, or just run blkid
+
 ```
 root@host:~# blkid
 /dev/sdb1: UUID="bc12345-1234-1234-1234-aaaabbbbcccc" BLOCK_SIZE="1024" TYPE="ext4" PARTUUID="ab1c2345-01"
 ```
-
-Now running `wsbkp.sh -l` should display drive details.
 
 **2)** Change settings inside script:
 
@@ -142,7 +142,7 @@ If all is well, schedule the script to run every week for example. See cron and 
 Run script as root:
 
 ``` shell
-echo '0 3 * * 1 root /usr/local/sbin/wsbkp.sh >/dev/null 2>&1' >/etc/cron.d/wsbkp`
+echo '0 3 * * 1 root /usr/local/sbin/wsbkp.sh >/dev/null 2>&1' >/etc/cron.d/wsbkp
 ```
 
 ### Systemd
