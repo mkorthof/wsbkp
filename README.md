@@ -61,10 +61,14 @@ OPTIONS: [-p]|[-o] power on | power off
          [-w]|[-s] wakeup | sleep
          [-m]|[-u] mount | umount
          [-l] list drive info
-         [-f] force
+         [-d] skip dev detection
          [dirs to backup] overwrites setting in script
 
 ```
+
+Also, these args are passed to rsync: `--verbose`, `--dry-run`, `--force`, `--ignore-errors` and all `--delete` options.
+
+To cleanup by deleting extra dirs/files on DST, run: `./wsbkp.sh --delete -y`
 
 ## Installation
 
@@ -127,7 +131,7 @@ The default is to backup the whole fileystem ('/') and exclude some dirs. It's a
 
 Run the script manually to verify correct settings. In case of issues set `OUT=/dev/stdout` to show output from rsync (progress/speed etc).
 
-Supported rsync options: `wsbkp.sh -n` for dry-run and/or `-v` for increased verbosity.
+Adding these rsync args may also be useful: `--verbose` and/or `--dry-run`.
 
 ## Scheduling
 
